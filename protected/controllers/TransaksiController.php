@@ -84,11 +84,29 @@ class TransaksiController extends Controller
                     if (!Yii::app()->user->hasState('items_belanja'))
                         Yii::app()->user->setState('items_belanja', array());
 
+                    if ($model->diskon_rel_count > 0) {
+                        foreach ($model->getDiscontedItems() as $index => $data) {
+                            if ($data->jumlah_produk <= 0)
+                                $data->jumlah_produk = 1;
+                            $bagi = 1 / $data->jumlah_produk;
+                            $mod = 1 % $data->jumlah_produk;
+                            if (((int)$bagi > 0) & ($bagi <= $data->jumlah_produk)) {
+                                if (time() >= strtotime($data->tanggal_mulai_diskon) && time() <= strtotime($data->tanggal_berakhir_diskon)) {
+                                    $price = (int)$bagi * $data->harga_produk;
+                                    if ($mod > 0)
+                                        $price = $price + $model->harga_produk * $mod;
+                                }
+                            }
+                        }
+                    } else {
+                        $price = $model->harga_produk * 1;
+                    }
+
                     $items = array(
                         'id' => $model->id,
                         'name' => $model->nama_produk,
                         'desc' => $model->deskripsi_produk,
-                        'unit_price' => $model->harga_produk,
+                        'unit_price' => ($price>0)? $price : $model->harga_produk,
                         'qty' => 1,
                         'discount' => 0,
                         'change_value' => 1,
@@ -172,7 +190,7 @@ class TransaksiController extends Controller
                     echo CJSON::encode(array(
                         'status' => 'success',
                         'div' => (int)$_POST['qty'],
-                        'total' => number_format($total - $discount, 0, ',', '.'),
+                        'total' => number_format($total, 0, ',', '.'),
                         'subtotal' => number_format($this->getTotalBelanja(), 0, ',', '.'),
                         'discount' => number_format($discount, 0, ',', '.'),
                     ));
@@ -214,7 +232,7 @@ class TransaksiController extends Controller
                     );
                     if ($model2->save()) {
                         $invoice_id = $model2->id;
-                        $tot = 0;
+                        $tot_tagihan = 0;
                         foreach (Yii::app()->user->getState('items_belanja') as $index => $data) {
                             $model3 = new DetailTagihan;
                             $model3->id_produk = $data['id'];
@@ -227,10 +245,10 @@ class TransaksiController extends Controller
                                 $model3->diskon = Promosi::getDiscountValue(Yii::app()->user->getState('promocode'), $model3->harga);
                             }
                             if($model3->save()){
-                                $tot = $tot + ($data['unit_price']*$data['qty']);
+                                $tot_tagihan = $tot_tagihan + ($data['unit_price']*$data['qty']);
                             }
                         }
-                        $model2->total_tagihan = $tot;
+                        $model2->total_tagihan = $tot_tagihan;
                         $model2->update(array('total_tagihan'));
 
                         Yii::app()->user->setState('items_belanja', null);
@@ -407,6 +425,7 @@ class TransaksiController extends Controller
 
             if (Yii::app()->user->hasState('items_filter') & !isset($_POST['Produk']))
                 $_POST = Yii::app()->user->getState('items_filter');
+
             if (isset($_POST['Produk'])) {
                 //$criteria->compare('barcode', $_POST['Produk']['barcode'], true);
                 $criteria->compare('LOWER(nama_produk)', strtolower($_POST['items_name']), true);
@@ -461,8 +480,8 @@ class TransaksiController extends Controller
 
             $model = Promosi::model()->find($criteria);
             if (!empty($model->id)) {
-                if (!empty($model->tanggal_berakhir_promosi)) {
-                    if (strtotime($model->tanggal_berakhir_promosi) <= time())
+                if (empty($model->tanggal_berakhir_promosi)) {
+                    if (strtotime($model->tanggal_mulai_promosi) <= time())
                         Yii::app()->user->setState('promocode', $model->id);
                     else
                         Yii::app()->user->setState('promocode', null);

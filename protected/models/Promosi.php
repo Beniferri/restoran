@@ -1,4 +1,4 @@
-php<?php
+<?php
 
 /**
  * This is the model class for table "{{promosi}}".
@@ -164,3 +164,4 @@ class Promosi extends CActiveRecord
             return $items;
     }
 }
+
