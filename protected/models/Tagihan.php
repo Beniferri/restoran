@@ -386,3 +386,4 @@ class Tagihan extends CActiveRecord
         return ($write>0)? true : false;
     }
 }
+
